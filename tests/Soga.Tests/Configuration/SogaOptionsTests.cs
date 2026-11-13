@@ -28,7 +28,7 @@ public sealed class SogaOptionsTests
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]
-    [InlineData(SogaOptions.AbsoluteMaximumTextLength + 1)]
+    [InlineData(SogaLimits.AbsoluteMaximumTextLength + 1)]
     public void AddSoga_WhenMaximumTextLengthIsOutOfRange_RejectsConfiguration(int length)
     {
         AssertRejected(options => options.Messages.MaximumTextLength = length);
@@ -77,7 +77,8 @@ public sealed class SogaOptionsTests
     {
         AssertRejected(options => options.Messages.EditWindow = TimeSpan.Zero);
 
-        using var provider = new ServiceCollection().AddLogging().AddSoga(options => options.Messages.EditWindow = null).Services.BuildServiceProvider();
+        using var provider = new ServiceCollection().AddLogging().AddSoga(options => options.Messages.EditWindow = null)
+            .Services.BuildServiceProvider();
         Assert.Null(provider.GetRequiredService<IOptions<SogaOptions>>().Value.Messages.EditWindow);
     }
 
@@ -108,10 +109,15 @@ public sealed class SogaOptionsTests
 
         var o = provider.GetRequiredService<IOptions<SogaOptions>>().Value;
 
-        Assert.Equal((256, 100, false), (o.Groups.MaximumParticipants, o.Groups.MaximumTitleLength, o.Groups.PostSystemMessages));
-        Assert.Equal((true, TimeSpan.FromMinutes(15), false, true, true), (o.Messages.AllowEditing, o.Messages.EditWindow, o.Messages.RetainEditHistory, o.Messages.AllowDeletion, o.Messages.AllowAdminDeletion));
-        Assert.Equal((true, TimeSpan.FromSeconds(6), TimeSpan.FromSeconds(2)), (o.Typing.Enabled, o.Typing.Timeout, o.Typing.MinimumBroadcastInterval));
-        Assert.Equal((true, TimeSpan.FromSeconds(10), false), (o.Presence.Enabled, o.Presence.OfflineGracePeriod, o.Presence.ExposeLastSeen));
+        Assert.Equal((256, 100, false),
+            (o.Groups.MaximumParticipants, o.Groups.MaximumTitleLength, o.Groups.PostSystemMessages));
+        Assert.Equal((true, TimeSpan.FromMinutes(15), false, true, true),
+            (o.Messages.AllowEditing, o.Messages.EditWindow, o.Messages.RetainEditHistory, o.Messages.AllowDeletion,
+                o.Messages.AllowAdminDeletion));
+        Assert.Equal((true, TimeSpan.FromSeconds(6), TimeSpan.FromSeconds(2)),
+            (o.Typing.Enabled, o.Typing.Timeout, o.Typing.MinimumBroadcastInterval));
+        Assert.Equal((true, TimeSpan.FromSeconds(10), false),
+            (o.Presence.Enabled, o.Presence.OfflineGracePeriod, o.Presence.ExposeLastSeen));
     }
 
     [Fact]
@@ -127,8 +133,8 @@ public sealed class SogaOptionsTests
             .Services
             .BuildServiceProvider();
 
-        var exception = Assert.Throws<OptionsValidationException>(
-            () => provider.GetRequiredService<IOptions<SogaOptions>>().Value);
+        var exception =
+            Assert.Throws<OptionsValidationException>(() => provider.GetRequiredService<IOptions<SogaOptions>>().Value);
 
         Assert.Equal(2, exception.Failures.Count());
     }
@@ -137,7 +143,6 @@ public sealed class SogaOptionsTests
     {
         using var provider = new ServiceCollection().AddLogging().AddSoga(configure).Services.BuildServiceProvider();
 
-        Assert.Throws<OptionsValidationException>(
-            () => provider.GetRequiredService<IOptions<SogaOptions>>().Value);
+        Assert.Throws<OptionsValidationException>(() => provider.GetRequiredService<IOptions<SogaOptions>>().Value);
     }
 }

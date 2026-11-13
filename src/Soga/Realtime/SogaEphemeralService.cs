@@ -80,7 +80,8 @@ internal sealed class SogaEphemeralService(
                     conversation,
                     new TypingChangedData(user, false),
                     clock.GetUtcNow());
-                await hub.Clients.Group(SogaGroups.Conversation(tenant, conversation)).SendAsync(evt.Type, evt, cancellationToken);
+                await hub.Clients.Group(SogaGroups.Conversation(tenant, conversation))
+                    .SendAsync(evt.Type, evt, cancellationToken);
             }
         }
 
@@ -88,7 +89,8 @@ internal sealed class SogaEphemeralService(
         {
             foreach (var (tenant, expired) in await presence.CollectExpiredAsync(clock.GetUtcNow(), cancellationToken))
             {
-                await presenceBroadcaster.BroadcastAsync(tenant, expired.UserId, online: false, expired.LastSeenAt, cancellationToken);
+                await presenceBroadcaster.BroadcastAsync(tenant, expired.UserId, online: false, expired.LastSeenAt,
+                    cancellationToken);
             }
         }
     }

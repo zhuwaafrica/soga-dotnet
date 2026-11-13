@@ -52,7 +52,7 @@ internal static class SogaIdentity
     public const string ReservedUserIdPrefix = "$soga:";
 
     /// <summary>
-    /// Normalizes a user ID using the <see cref="SogaOptions.MaximumUserIdLength"/> limit.
+    /// Normalizes a user ID using the <see cref="SogaLimits.MaximumUserIdLength"/> limit.
     /// </summary>
     /// <param name="raw">The user ID as supplied by the host.</param>
     /// <returns>
@@ -64,7 +64,7 @@ internal static class SogaIdentity
     /// </remarks>
     public static string? NormalizeUserId(string? raw)
     {
-        var value = Normalize(raw, SogaOptions.MaximumUserIdLength);
+        var value = Normalize(raw, SogaLimits.MaximumUserIdLength);
         return value is not null && value.StartsWith(ReservedUserIdPrefix, StringComparison.Ordinal) ? null : value;
     }
 
@@ -127,7 +127,7 @@ internal sealed class SogaCallerResolver(
 
         var tenantId = SogaIdentity.Normalize(
             await tenants.GetTenantIdAsync(cancellationToken),
-            SogaOptions.MaximumTenantIdLength);
+            SogaLimits.MaximumTenantIdLength);
 
         return tenantId is null
             ? SogaResult<SogaCaller>.Fail(SogaErrors.TenantUnavailable)
