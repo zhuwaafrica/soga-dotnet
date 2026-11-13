@@ -70,12 +70,12 @@ public static class SogaModelBuilderExtensions
         {
             entity.ToTable($"{tablePrefix}Conversations", schema);
             entity.HasKey(x => new { x.TenantId, x.Id });
-            Ident(entity.Property(x => x.TenantId), SogaOptions.MaximumTenantIdLength);
+            Ident(entity.Property(x => x.TenantId), SogaLimits.MaximumTenantIdLength);
             Ident(entity.Property(x => x.DirectKey), 64);
-            Ident(entity.Property(x => x.ExternalReference), SogaOptions.MaximumExternalReferenceLength);
+            Ident(entity.Property(x => x.ExternalReference), SogaLimits.MaximumExternalReferenceLength);
             entity.Property(x => x.Kind).HasMaxLength(10);
-            entity.Property(x => x.Title).HasMaxLength(SogaOptions.AbsoluteMaximumTitleLength);
-            entity.Property(x => x.MetadataJson).HasMaxLength(SogaOptions.AbsoluteMaximumMetadataBytes);
+            entity.Property(x => x.Title).HasMaxLength(SogaLimits.AbsoluteMaximumTitleLength);
+            entity.Property(x => x.MetadataJson).HasMaxLength(SogaLimits.AbsoluteMaximumMetadataBytes);
             entity.Property(x => x.CreatedAt).HasConversion<UtcDateTimeConverter>();
             entity.Property(x => x.LastActivityAt).HasConversion<UtcDateTimeConverter>();
             entity.Property(x => x.ArchivedAt).HasConversion<NullableUtcDateTimeConverter>();
@@ -87,8 +87,8 @@ public static class SogaModelBuilderExtensions
         {
             entity.ToTable($"{tablePrefix}Participants", schema);
             entity.HasKey(x => new { x.TenantId, x.ConversationId, x.UserId });
-            Ident(entity.Property(x => x.TenantId), SogaOptions.MaximumTenantIdLength);
-            Ident(entity.Property(x => x.UserId), SogaOptions.MaximumUserIdLength);
+            Ident(entity.Property(x => x.TenantId), SogaLimits.MaximumTenantIdLength);
+            Ident(entity.Property(x => x.UserId), SogaLimits.MaximumUserIdLength);
             entity.Property(x => x.Role).HasConversion<string>().HasMaxLength(10);
             entity.Property(x => x.JoinedAt).HasConversion<UtcDateTimeConverter>();
             entity.Property(x => x.LeftAt).HasConversion<NullableUtcDateTimeConverter>();
@@ -101,12 +101,12 @@ public static class SogaModelBuilderExtensions
         {
             entity.ToTable($"{tablePrefix}Messages", schema);
             entity.HasKey(x => new { x.TenantId, x.Id });
-            Ident(entity.Property(x => x.TenantId), SogaOptions.MaximumTenantIdLength);
-            Ident(entity.Property(x => x.SenderId), SogaOptions.MaximumUserIdLength);
-            Ident(entity.Property(x => x.ClientMessageId), SogaOptions.MaximumClientMessageIdLength);
-            Ident(entity.Property(x => x.DeletedBy), SogaOptions.MaximumUserIdLength);
+            Ident(entity.Property(x => x.TenantId), SogaLimits.MaximumTenantIdLength);
+            Ident(entity.Property(x => x.SenderId), SogaLimits.MaximumUserIdLength);
+            Ident(entity.Property(x => x.ClientMessageId), SogaLimits.MaximumClientMessageIdLength);
+            Ident(entity.Property(x => x.DeletedBy), SogaLimits.MaximumUserIdLength);
             entity.Property(x => x.Kind).HasMaxLength(20);
-            entity.Property(x => x.Content).HasMaxLength(SogaOptions.AbsoluteMaximumTextLength);
+            entity.Property(x => x.Content).HasMaxLength(SogaLimits.AbsoluteMaximumTextLength);
             entity.Property(x => x.CreatedAt).HasConversion<UtcDateTimeConverter>();
             entity.Property(x => x.EditedAt).HasConversion<NullableUtcDateTimeConverter>();
             entity.Property(x => x.DeletedAt).HasConversion<NullableUtcDateTimeConverter>();
@@ -120,8 +120,8 @@ public static class SogaModelBuilderExtensions
         {
             entity.ToTable($"{tablePrefix}MessageEdits", schema);
             entity.HasKey(x => new { x.TenantId, x.MessageId, x.Version });
-            Ident(entity.Property(x => x.TenantId), SogaOptions.MaximumTenantIdLength);
-            entity.Property(x => x.PreviousContent).HasMaxLength(SogaOptions.AbsoluteMaximumTextLength);
+            Ident(entity.Property(x => x.TenantId), SogaLimits.MaximumTenantIdLength);
+            entity.Property(x => x.PreviousContent).HasMaxLength(SogaLimits.AbsoluteMaximumTextLength);
             entity.Property(x => x.EditedAt).HasConversion<UtcDateTimeConverter>();
             entity.HasOne<MessageRow>()
                 .WithMany()
@@ -134,8 +134,8 @@ public static class SogaModelBuilderExtensions
         {
             entity.ToTable($"{tablePrefix}Changes", schema);
             entity.HasKey(x => new { x.TenantId, x.Sequence });
-            Ident(entity.Property(x => x.TenantId), SogaOptions.MaximumTenantIdLength);
-            Ident(entity.Property(x => x.TargetUserId), SogaOptions.MaximumUserIdLength);
+            Ident(entity.Property(x => x.TenantId), SogaLimits.MaximumTenantIdLength);
+            Ident(entity.Property(x => x.TargetUserId), SogaLimits.MaximumUserIdLength);
             entity.Property(x => x.Sequence).ValueGeneratedNever();
             entity.Property(x => x.ChangeType).HasMaxLength(100);
             entity.Property(x => x.OccurredAt).HasConversion<UtcDateTimeConverter>();
@@ -149,14 +149,14 @@ public static class SogaModelBuilderExtensions
         {
             entity.ToTable($"{tablePrefix}TenantState", schema);
             entity.HasKey(x => x.TenantId);
-            Ident(entity.Property(x => x.TenantId), SogaOptions.MaximumTenantIdLength);
+            Ident(entity.Property(x => x.TenantId), SogaLimits.MaximumTenantIdLength);
         });
 
         modelBuilder.Entity<OutboxRow>(entity =>
         {
             entity.ToTable($"{tablePrefix}Outbox", schema);
             entity.HasKey(x => new { x.TenantId, x.Id });
-            Ident(entity.Property(x => x.TenantId), SogaOptions.MaximumTenantIdLength);
+            Ident(entity.Property(x => x.TenantId), SogaLimits.MaximumTenantIdLength);
             entity.Property(x => x.EventType).HasMaxLength(200);
             entity.Property(x => x.LastFailure).HasMaxLength(200);
             entity.Property(x => x.OccurredAt).HasConversion<UtcDateTimeConverter>();

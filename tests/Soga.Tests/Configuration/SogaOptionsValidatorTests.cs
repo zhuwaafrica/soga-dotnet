@@ -11,13 +11,19 @@ public sealed class SogaOptionsValidatorTests
         { "Soga:RoutePrefix", o => o.RoutePrefix = "soga" },
         { "Soga:RoutePrefix", o => o.RoutePrefix = "/soga/" },
         { "Soga:DefaultTenantId", o => o.DefaultTenantId = " " },
-        { "Soga:DefaultTenantId", o => o.DefaultTenantId = new string('t', SogaOptions.MaximumTenantIdLength + 1) },
+        { "Soga:DefaultTenantId", o => o.DefaultTenantId = new string('t', SogaLimits.MaximumTenantIdLength + 1) },
         { "Soga:Identity:UserIdClaimType", o => o.Identity.UserIdClaimType = "" },
         { "Soga:Conversations:DefaultPageSize", o => o.Conversations.DefaultPageSize = 0 },
         { "Soga:Conversations:DefaultPageSize", o => o.Conversations.MaximumPageSize = 501 },
         { "Soga:Messages:DefaultPageSize", o => o.Messages.DefaultPageSize = 0 },
         { "Soga:Sync:DefaultBatchSize", o => o.Sync.DefaultBatchSize = 0 },
-        { "Soga:Sync:DefaultBatchSize", o => { o.Sync.DefaultBatchSize = 100; o.Sync.MaximumBatchSize = 50; } },
+        {
+            "Soga:Sync:DefaultBatchSize", o =>
+            {
+                o.Sync.DefaultBatchSize = 100;
+                o.Sync.MaximumBatchSize = 50;
+            }
+        },
         { "Soga:Messages:MaximumTextLength", o => o.Messages.MaximumTextLength = 0 },
         { "Soga:Messages:EditWindow", o => o.Messages.EditWindow = TimeSpan.FromSeconds(-1) },
         { "Soga:Conversations:MaximumMetadataBytes", o => o.Conversations.MaximumMetadataBytes = 1 },
@@ -25,7 +31,10 @@ public sealed class SogaOptionsValidatorTests
         { "Soga:Conversations:MaximumMetadataProperties", o => o.Conversations.MaximumMetadataProperties = 101 },
         { "Soga:Groups:MaximumParticipants", o => o.Groups.MaximumParticipants = 1 },
         { "Soga:Groups:MaximumTitleLength", o => o.Groups.MaximumTitleLength = 0 },
-        { "Soga:Groups:MaximumTitleLength", o => o.Groups.MaximumTitleLength = SogaOptions.AbsoluteMaximumTitleLength + 1 },
+        {
+            "Soga:Groups:MaximumTitleLength",
+            o => o.Groups.MaximumTitleLength = SogaLimits.AbsoluteMaximumTitleLength + 1
+        },
         { "Soga:Typing:Timeout", o => o.Typing.Timeout = TimeSpan.Zero },
         { "Soga:Typing:Timeout", o => o.Typing.MinimumBroadcastInterval = TimeSpan.FromSeconds(-1) },
         { "Soga:Presence:OfflineGracePeriod", o => o.Presence.OfflineGracePeriod = TimeSpan.FromSeconds(-1) },
@@ -43,8 +52,12 @@ public sealed class SogaOptionsValidatorTests
     public static TheoryData<Action<SogaOptions>> BoundarySettings => new()
     {
         o => o.Messages.MaximumTextLength = 1,
-        o => o.Messages.MaximumTextLength = SogaOptions.AbsoluteMaximumTextLength,
-        o => { o.Messages.DefaultPageSize = 500; o.Messages.MaximumPageSize = 500; },
+        o => o.Messages.MaximumTextLength = SogaLimits.AbsoluteMaximumTextLength,
+        o =>
+        {
+            o.Messages.DefaultPageSize = 500;
+            o.Messages.MaximumPageSize = 500;
+        },
         o => o.Messages.EditWindow = null,
         o => o.Conversations.MaximumMetadataBytes = 2,
         o => o.Conversations.MaximumMetadataProperties = 100,
@@ -53,15 +66,20 @@ public sealed class SogaOptionsValidatorTests
         o => o.Presence.OfflineGracePeriod = TimeSpan.Zero,
         o => o.Typing.MinimumBroadcastInterval = TimeSpan.Zero,
         o => o.Outbox.MaximumAttempts = 1,
-        o => { o.Outbox.BaseRetryDelay = TimeSpan.FromSeconds(5); o.Outbox.MaximumRetryDelay = TimeSpan.FromSeconds(5); },
+        o =>
+        {
+            o.Outbox.BaseRetryDelay = TimeSpan.FromSeconds(5);
+            o.Outbox.MaximumRetryDelay = TimeSpan.FromSeconds(5);
+        },
         o => o.Security.MaximumRequestBodyBytes = 1024,
         o => o.Security.MaximumRequestBodyBytes = 1_048_576,
-        o => o.DefaultTenantId = new string('t', SogaOptions.MaximumTenantIdLength),
+        o => o.DefaultTenantId = new string('t', SogaLimits.MaximumTenantIdLength),
     };
 
     [Theory]
     [MemberData(nameof(InvalidSettings))]
-    public void Validate_WhenSettingIsInvalid_FailsAndNamesTheConfigurationKey(string key, Action<SogaOptions> configure)
+    public void Validate_WhenSettingIsInvalid_FailsAndNamesTheConfigurationKey(string key,
+        Action<SogaOptions> configure)
     {
         var options = new SogaOptions();
         configure(options);
