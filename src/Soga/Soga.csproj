@@ -1,21 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- Shared package settings (authors, license, icon, readme, Source Link, version) are in src/Directory.Build.props. -->
   <PropertyGroup>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PackageId>Soga</PackageId>
-    <Version>0.2.0-preview.1</Version>
-    <Authors>Zhuwa Africa Limited</Authors>
-    <Description>Embeddable direct messaging primitives and ASP.NET Core integration.</Description>
-    <PackageLicenseFile>LICENSE</PackageLicenseFile>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageIcon>soga-package-icon.png</PackageIcon>
+    <Description>Self-hosted messaging framework for ASP.NET Core: direct and group conversations, persistent messages, roles, authorization, history, read state, realtime SignalR events and recovery after a disconnect.</Description>
+    <PackageTags>messaging;chat;conversations;signalr;realtime;aspnetcore;self-hosted;direct-messages;group-chat</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
-    <None Include="..\..\LICENSE" Pack="true" PackagePath="" />
-    <None Include="..\..\README.md" Pack="true" PackagePath="" />
-    <None Include="..\..\assets\soga-package-icon.png" Pack="true" PackagePath="" />
   </ItemGroup>
 
   <ItemGroup>

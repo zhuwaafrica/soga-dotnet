@@ -1,0 +1,57 @@
+<Project>
+
+  <!-- Settings shared by every package under src/. The repository-wide props (target framework, nullable, analyzers) are
+       imported first, so this file only adds what packages need. Each project keeps its own PackageId, Description and tags. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <!-- NuGet metadata -->
+  <PropertyGroup>
+    <Authors>Zhuwa Africa Limited</Authors>
+    <Company>Zhuwa Africa Limited</Company>
+    <Product>Soga</Product>
+    <Copyright>Copyright (c) Zhuwa Africa Limited 2026</Copyright>
+    <PackageProjectUrl>https://github.com/zhuwaafrica/soga-dotnet</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/zhuwaafrica/soga-dotnet</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageReadmeFile>package-readme.md</PackageReadmeFile>
+    <!-- A 128x128 copy of the logo, the size NuGet recommends; the full-size logo stays in assets/ for the README. -->
+    <PackageIcon>soga-nuget-icon.png</PackageIcon>
+    <PackageReleaseNotes>Changes in each version: https://github.com/zhuwaafrica/soga-dotnet/releases</PackageReleaseNotes>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <!-- Source Link is built into the .NET SDK for GitHub; write the repository URL into the package. -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+
+    <!-- Debug symbols as a separate .snupkg for the NuGet.org symbol server. -->
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+
+    <!-- Fail `dotnet pack` on package problems. Add PackageValidationBaselineVersion once a version is published. -->
+    <EnablePackageValidation>true</EnablePackageValidation>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <!-- Official-build settings only on CI (a local build keeps debugger source paths working). -->
+  <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <!-- Version: MinVer reads it from the latest git tag (v0.3.0 gives 0.3.0), so no version is written in any project. Every
+       package in the repository gets the same version from the same tag. -->
+  <PropertyGroup>
+    <MinVerTagPrefix>v</MinVerTagPrefix>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MinVer" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- Files inside every package. These live outside the project folders, so Include adds each one exactly once. -->
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)../package-readme.md" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)../assets/soga-nuget-icon.png" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+</Project>

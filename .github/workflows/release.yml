@@ -1,0 +1,76 @@
+name: Release
+
+# Publishes Soga and Soga.EntityFrameworkCore to nuget.org when a version tag is pushed (for example v0.3.0 or v1.0.0-beta.1).
+# MinVer turns the tag into the package version, so the tag is the only place a version is written.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # The nuget.org Trusted Publishing policy is limited to this environment, so only this job can obtain a publish key. Required
+    # reviewers can be added to the environment in the repository settings to approve each release by hand.
+    environment: nuget
+    permissions:
+      # Creates the GitHub release that the package release notes link to.
+      contents: write
+      # Lets the job request a GitHub OIDC token, which nuget.org exchanges for a one-hour API key (Trusted Publishing).
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Full history and tags, so MinVer can compute the version from the tag being released.
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: global.json
+
+      # Nothing is published unless it builds without warnings and every test passes. The database suites already ran in CI.
+      - name: Restore
+        run: dotnet restore Soga.slnx
+
+      - name: Build
+        run: dotnet build Soga.slnx --no-restore -c Release -warnaserror
+
+      - name: Test
+        run: dotnet test Soga.slnx --no-build -c Release
+
+      - name: Pack
+        run: dotnet pack Soga.slnx --no-build -c Release -o artifacts/packages
+
+      # Requested just before the push, because the key expires after one hour and each token gives one key.
+      - name: NuGet login (Trusted Publishing)
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        id: login
+        with:
+          # The nuget.org profile name (not the email) of a ZhuwaAfrica member, kept as a secret per NuGet's guidance.
+          user: ${{ secrets.NUGET_USER }}
+
+      # Pushing each .nupkg also pushes the .snupkg next to it to the symbol server. --skip-duplicate makes a re-run of the same
+      # tag harmless instead of failing on a version that is already published.
+      - name: Push to nuget.org
+        run: >
+          dotnet nuget push "artifacts/packages/*.nupkg"
+          --api-key "${{ steps.login.outputs.NUGET_API_KEY }}"
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate
+
+      # A tag with a suffix (v1.0.0-beta.1) is marked as a prerelease on GitHub, matching how NuGet treats the version.
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          prerelease=""
+          case "$TAG" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes $prerelease artifacts/packages/*

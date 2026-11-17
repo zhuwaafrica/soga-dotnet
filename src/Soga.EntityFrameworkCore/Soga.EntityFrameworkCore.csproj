@@ -1,23 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- Shared package settings (authors, license, icon, readme, Source Link, version) are in src/Directory.Build.props. -->
   <PropertyGroup>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PackageId>Soga.EntityFrameworkCore</PackageId>
-    <Version>0.2.0-preview.1</Version>
-    <Authors>Zhuwa Africa Limited</Authors>
-    <Description>Entity Framework Core persistence integration for Soga.</Description>
-    <PackageLicenseFile>LICENSE</PackageLicenseFile>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageIcon>soga-package-icon.png</PackageIcon>
+    <Description>Entity Framework Core storage for Soga: SQL Server and PostgreSQL in production, SQLite for development. Your DbContext owns the schema and migrations.</Description>
+    <PackageTags>messaging;chat;signalr;aspnetcore;entityframeworkcore;efcore;sqlserver;postgresql</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
     <ProjectReference Include="..\Soga\Soga.csproj" />
-    <None Include="..\..\LICENSE" Pack="true" PackagePath="" />
-    <None Include="..\..\README.md" Pack="true" PackagePath="" />
-    <None Include="..\..\assets\soga-package-icon.png" Pack="true" PackagePath="" />
   </ItemGroup>
 
   <ItemGroup>
