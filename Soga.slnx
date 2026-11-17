@@ -39,6 +39,7 @@
     <File Path="docs/decisions/0015-typing-and-presence.md" />
     <File Path="docs/decisions/0016-database-providers-and-identity-collation.md" />
     <File Path="docs/decisions/0017-v2-protocol-and-compatibility.md" />
+    <File Path="docs/decisions/0018-client-sdks-in-this-repository.md" />
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/Soga.MarketplaceSample/Soga.MarketplaceSample.csproj" />
@@ -46,6 +47,7 @@
     <Project Path="samples/Soga.TeamChatSample/Soga.TeamChatSample.csproj" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/Soga.Client/Soga.Client.csproj" />
     <Project Path="src/Soga.EntityFrameworkCore/Soga.EntityFrameworkCore.csproj" />
     <Project Path="src/Soga/Soga.csproj" />
   </Folder>

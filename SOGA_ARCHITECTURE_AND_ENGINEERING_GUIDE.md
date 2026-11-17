@@ -99,15 +99,16 @@ soga-dotnet/
 │   │   ├── Diagnostics/
 │   │   ├── Errors/
 │   │   └── Extensions/
-│   └── Soga.EntityFrameworkCore/
-│       ├── Configuration/
-│       ├── Entities/
-│       ├── Mapping/
-│       ├── Repositories/
-│       ├── Transactions/
-│       ├── Synchronization/
-│       ├── Outbox/
-│       └── Extensions/
+│   ├── Soga.EntityFrameworkCore/
+│   │   ├── Configuration/
+│   │   ├── Entities/
+│   │   ├── Mapping/
+│   │   ├── Repositories/
+│   │   ├── Transactions/
+│   │   ├── Synchronization/
+│   │   ├── Outbox/
+│   │   └── Extensions/
+│   └── Soga.Client/          (.NET client, placeholder until V3; see ADR 0018)
 ├── tests/
 │   ├── Soga.Tests/
 │   ├── Soga.IntegrationTests/
