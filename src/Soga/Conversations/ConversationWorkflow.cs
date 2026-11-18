@@ -28,6 +28,23 @@ internal sealed record ConversationListRequest(
     string? State = null,
     string? ExternalReference = null);
 
+/// <summary>The validated, normalized values of a create-direct request.</summary>
+/// <param name="OtherUserId">The normalized ID of the other participant.</param>
+/// <param name="ExternalReference">The trimmed external reference, or <see langword="null"/> when none.</param>
+/// <param name="MetadataJson">The validated metadata document, or <see langword="null"/> when none.</param>
+internal sealed record DirectConversationInput(string OtherUserId, string? ExternalReference, string? MetadataJson);
+
+/// <summary>The validated, normalized filters and page size of a conversation list request.</summary>
+/// <param name="Limit">The effective page size.</param>
+/// <param name="Kind">The stored kind filter, or <see langword="null"/> for any kind.</param>
+/// <param name="State">The state filter.</param>
+/// <param name="ExternalReference">The trimmed external reference filter, or <see langword="null"/> for none.</param>
+internal sealed record ConversationListFilters(
+    int Limit,
+    string? Kind,
+    ConversationStateFilter State,
+    string? ExternalReference);
+
 /// <summary>
 /// Implements creating direct conversations, reading a conversation, and listing the caller's conversations.
 /// </summary>
@@ -71,38 +88,17 @@ internal sealed class ConversationWorkflow(
 
         async Task<SogaResult<CreatedResult<ConversationResponse>>> ExecuteAsync()
         {
-            var otherUserId = SogaIdentity.NormalizeUserId(request?.OtherUserId);
-            if (otherUserId is null)
+            var (input, invalid) = ValidateDirect(caller, request);
+            if (input is null)
             {
-                return Fail(SogaErrors.InvalidRequest($"otherUserId is required and cannot exceed {SogaOptions.MaximumUserIdLength} characters."));
-            }
-
-            if (string.Equals(otherUserId, caller.UserId, StringComparison.Ordinal))
-            {
-                return Fail(SogaErrors.InvalidRequest("A direct conversation requires two different users."));
-            }
-
-            var externalReference = request!.ExternalReference?.Trim();
-            if (string.IsNullOrEmpty(externalReference))
-            {
-                externalReference = null;
-            }
-            else if (externalReference.Length > SogaOptions.MaximumExternalReferenceLength)
-            {
-                return Fail(SogaErrors.InvalidRequest($"externalReference cannot exceed {SogaOptions.MaximumExternalReferenceLength} characters."));
-            }
-
-            var (metadataJson, metadataError) = SogaMetadata.Validate(request.Metadata, options.Value.Conversations);
-            if (metadataError is not null)
-            {
-                return Fail(SogaErrors.MetadataInvalid(metadataError));
+                return Fail(invalid!);
             }
 
             var denied = await authorizer.CheckAsync(
                 SogaAction.CreateDirectConversation,
                 caller,
-                otherUserId,
-                externalReference,
+                input.OtherUserId,
+                input.ExternalReference,
                 cancellationToken);
             if (denied is not null)
             {
@@ -113,12 +109,12 @@ internal sealed class ConversationWorkflow(
                 new CreateDirectConversationCommand(
                     caller.TenantId,
                     caller.UserId,
-                    otherUserId,
-                    externalReference,
+                    input.OtherUserId,
+                    input.ExternalReference,
                     ids.NewId(),
                     ids.NewId(),
                     clock.GetUtcNow(),
-                    metadataJson),
+                    input.MetadataJson),
                 cancellationToken);
 
             if (outcome.Created)
@@ -132,6 +128,45 @@ internal sealed class ConversationWorkflow(
 
         static SogaResult<CreatedResult<ConversationResponse>> Fail(SogaError error) =>
             SogaResult<CreatedResult<ConversationResponse>>.Fail(error);
+    }
+
+    /// <summary>
+    /// Validates a create-direct request and normalizes its values.
+    /// </summary>
+    /// <param name="caller">The trusted caller.</param>
+    /// <param name="request">The request to validate.</param>
+    /// <returns>The normalized input, or the error that describes the first problem found.</returns>
+    private (DirectConversationInput? Input, SogaError? Error) ValidateDirect(
+        SogaCaller caller,
+        CreateDirectConversationRequest? request)
+    {
+        var otherUserId = SogaIdentity.NormalizeUserId(request?.OtherUserId);
+        if (otherUserId is null)
+        {
+            return (null,
+                SogaErrors.InvalidRequest(
+                    $"otherUserId is required and cannot exceed {SogaLimits.MaximumUserIdLength} characters."));
+        }
+
+        if (string.Equals(otherUserId, caller.UserId, StringComparison.Ordinal))
+        {
+            return (null, SogaErrors.InvalidRequest("A direct conversation requires two different users."));
+        }
+
+        if (!TryNormalizeReference(request!.ExternalReference, out var externalReference))
+        {
+            return (null,
+                SogaErrors.InvalidRequest(
+                    $"externalReference cannot exceed {SogaLimits.MaximumExternalReferenceLength} characters."));
+        }
+
+        var (metadataJson, metadataError) = SogaMetadata.Validate(request.Metadata, options.Value.Conversations);
+        if (metadataError is not null)
+        {
+            return (null, SogaErrors.MetadataInvalid(metadataError));
+        }
+
+        return (new DirectConversationInput(otherUserId, externalReference, metadataJson), null);
     }
 
     /// <summary>
@@ -187,54 +222,14 @@ internal sealed class ConversationWorkflow(
 
         async Task<SogaResult<ConversationPageResponse>> ExecuteAsync()
         {
-            var paging = options.Value.Conversations;
-            var limit = SogaPaging.ResolveLimit(request.Limit, paging.DefaultPageSize, paging.MaximumPageSize);
-            if (limit is null)
+            var (filters, invalid) = ValidateList(request);
+            if (filters is null)
             {
-                return SogaResult<ConversationPageResponse>.Fail(SogaErrors.InvalidRequest("limit must be at least 1."));
-            }
-
-            string? kind = null;
-            if (!string.IsNullOrWhiteSpace(request.Kind))
-            {
-                kind = request.Kind.Trim().ToLowerInvariant() switch
-                {
-                    "direct" => SogaConversationKinds.Direct,
-                    "group" => SogaConversationKinds.Group,
-                    _ => null,
-                };
-
-                if (kind is null)
-                {
-                    return SogaResult<ConversationPageResponse>.Fail(SogaErrors.InvalidRequest("kind must be 'direct' or 'group'."));
-                }
-            }
-
-            var state = (request.State?.Trim().ToLowerInvariant()) switch
-            {
-                null or "" or "active" => ConversationStateFilter.Active,
-                "archived" => ConversationStateFilter.Archived,
-                "all" => ConversationStateFilter.All,
-                _ => (ConversationStateFilter?)null,
-            };
-
-            if (state is null)
-            {
-                return SogaResult<ConversationPageResponse>.Fail(SogaErrors.InvalidRequest("state must be 'active', 'archived', or 'all'."));
-            }
-
-            var reference = request.ExternalReference?.Trim();
-            if (string.IsNullOrEmpty(reference))
-            {
-                reference = null;
-            }
-            else if (reference.Length > SogaOptions.MaximumExternalReferenceLength)
-            {
-                return SogaResult<ConversationPageResponse>.Fail(SogaErrors.InvalidRequest("externalReference is too long."));
+                return SogaResult<ConversationPageResponse>.Fail(invalid!);
             }
 
             // The filters are part of the cursor scope, so a cursor cannot be replayed under different filters or by another user.
-            var scope = $"{caller.UserId}|{kind}|{state}|{reference}";
+            var scope = $"{caller.UserId}|{filters.Kind}|{filters.State}|{filters.ExternalReference}";
             DateTimeOffset? afterActivity = null;
             var skipTies = 0;
             if (request.Cursor is not null)
@@ -251,10 +246,10 @@ internal sealed class ConversationWorkflow(
                 new ListConversationsQuery(
                     caller.TenantId,
                     caller.UserId,
-                    limit.Value,
-                    kind,
-                    state.Value,
-                    reference,
+                    filters.Limit,
+                    filters.Kind,
+                    filters.State,
+                    filters.ExternalReference,
                     afterActivity,
                     skipTies),
                 cancellationToken);
@@ -266,6 +261,100 @@ internal sealed class ConversationWorkflow(
             return SogaResult<ConversationPageResponse>.Ok(
                 new ConversationPageResponse([.. page.Items.Select(c => c.ToResponse())], nextCursor));
         }
+    }
+
+    /// <summary>
+    /// Validates the filters and paging of a conversation list request and normalizes them.
+    /// </summary>
+    /// <param name="request">The request to validate.</param>
+    /// <returns>The normalized filters, or the error that describes the first problem found.</returns>
+    private (ConversationListFilters? Filters, SogaError? Error) ValidateList(ConversationListRequest request)
+    {
+        var paging = options.Value.Conversations;
+        var limit = SogaPaging.ResolveLimit(request.Limit, paging.DefaultPageSize, paging.MaximumPageSize);
+        if (limit is null)
+        {
+            return (null, SogaErrors.InvalidRequest("limit must be at least 1."));
+        }
+
+        if (!TryParseKind(request.Kind, out var kind))
+        {
+            return (null, SogaErrors.InvalidRequest("kind must be 'direct' or 'group'."));
+        }
+
+        if (!TryParseState(request.State, out var state))
+        {
+            return (null, SogaErrors.InvalidRequest("state must be 'active', 'archived', or 'all'."));
+        }
+
+        if (!TryNormalizeReference(request.ExternalReference, out var reference))
+        {
+            return (null, SogaErrors.InvalidRequest("externalReference is too long."));
+        }
+
+        return (new ConversationListFilters(limit.Value, kind, state, reference), null);
+    }
+
+    /// <summary>
+    /// Trims an external reference and treats a blank one as absent.
+    /// </summary>
+    /// <param name="raw">The reference supplied by the client.</param>
+    /// <param name="reference">The trimmed reference, or <see langword="null"/> when none was supplied.</param>
+    /// <returns><see langword="false"/> when the reference exceeds the maximum length; otherwise, <see langword="true"/>.</returns>
+    private static bool TryNormalizeReference(string? raw, out string? reference)
+    {
+        reference = raw?.Trim();
+        if (string.IsNullOrEmpty(reference))
+        {
+            reference = null;
+            return true;
+        }
+
+        return reference.Length <= SogaLimits.MaximumExternalReferenceLength;
+    }
+
+    /// <summary>
+    /// Parses the optional <c>kind</c> filter.
+    /// </summary>
+    /// <param name="raw">The value supplied by the client.</param>
+    /// <param name="kind">The stored kind, or <see langword="null"/> when no filter was supplied.</param>
+    /// <returns><see langword="false"/> when the value is not a known kind; otherwise, <see langword="true"/>.</returns>
+    private static bool TryParseKind(string? raw, out string? kind)
+    {
+        kind = null;
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return true;
+        }
+
+        kind = raw.Trim().ToLowerInvariant() switch
+        {
+            "direct" => SogaConversationKinds.Direct,
+            "group" => SogaConversationKinds.Group,
+            _ => null,
+        };
+
+        return kind is not null;
+    }
+
+    /// <summary>
+    /// Parses the optional <c>state</c> filter, which defaults to active conversations.
+    /// </summary>
+    /// <param name="raw">The value supplied by the client.</param>
+    /// <param name="state">The parsed state filter.</param>
+    /// <returns><see langword="false"/> when the value is not a known state; otherwise, <see langword="true"/>.</returns>
+    private static bool TryParseState(string? raw, out ConversationStateFilter state)
+    {
+        var parsed = raw?.Trim().ToLowerInvariant() switch
+        {
+            null or "" or "active" => ConversationStateFilter.Active,
+            "archived" => ConversationStateFilter.Archived,
+            "all" => ConversationStateFilter.All,
+            _ => (ConversationStateFilter?)null,
+        };
+
+        state = parsed.GetValueOrDefault();
+        return parsed is not null;
     }
 
     /// <summary>
@@ -312,7 +401,8 @@ internal sealed class ConversationWorkflow(
     /// <see langword="true"/> if the cursor is authentic, matches the scope, and holds a valid position; otherwise,
     /// <see langword="false"/>.
     /// </returns>
-    private bool TryDecodePosition(string cursor, SogaCaller caller, string scope, out DateTimeOffset activityAt, out int skip)
+    private bool TryDecodePosition(string cursor, SogaCaller caller, string scope, out DateTimeOffset activityAt,
+        out int skip)
     {
         activityAt = default;
         skip = 0;

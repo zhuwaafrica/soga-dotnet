@@ -46,6 +46,9 @@ internal sealed class MessageWorkflow(
     IEnumerable<ISogaMessageValidator> validators,
     IOptions<SogaOptions> options)
 {
+    /// <summary>The longest validator reason code carried in a rejection error.</summary>
+    private const int MaximumReasonLength = 100;
+
     /// <summary>
     /// The host message validators, materialized once so they are not re-enumerated on every send.
     /// </summary>
@@ -79,17 +82,10 @@ internal sealed class MessageWorkflow(
 
         async Task<SogaResult<CreatedResult<MessageResponse>>> ExecuteAsync()
         {
-            var clientMessageId = request?.ClientMessageId?.Trim();
-            if (!IsValidClientMessageId(clientMessageId))
+            var (clientMessageId, invalid) = ValidateSend(request);
+            if (clientMessageId is null)
             {
-                return Fail(SogaErrors.InvalidRequest(
-                    $"clientMessageId is required, at most {SogaOptions.MaximumClientMessageIdLength} characters, and may only contain letters, digits, '.', '_', '-' and ':'."));
-            }
-
-            var textError = ValidateText(request!.Text);
-            if (textError is not null)
-            {
-                return Fail(textError);
+                return Fail(invalid!);
             }
 
             var denied = await authorizer.CheckAsync(
@@ -104,7 +100,8 @@ internal sealed class MessageWorkflow(
                 return Fail(denied);
             }
 
-            var rejected = await RunValidatorsAsync(caller, conversationId, request.Text, request.ReplyToMessageId, cancellationToken);
+            var rejected = await RunValidatorsAsync(caller, conversationId, request!.Text, request.ReplyToMessageId,
+                cancellationToken);
             if (rejected is not null)
             {
                 return Fail(rejected);
@@ -115,7 +112,7 @@ internal sealed class MessageWorkflow(
                     caller.TenantId,
                     caller.UserId,
                     conversationId,
-                    clientMessageId!,
+                    clientMessageId,
                     request.Text,
                     ids.NewId(),
                     ids.NewId(),
@@ -128,22 +125,45 @@ internal sealed class MessageWorkflow(
                 signal.Notify();
             }
 
-            return outcome.Status switch
-            {
-                AppendStatus.Created => SogaResult<CreatedResult<MessageResponse>>.Ok(
-                    new CreatedResult<MessageResponse>(outcome.Message!.ToResponse(), true)),
-                AppendStatus.Duplicate => SogaResult<CreatedResult<MessageResponse>>.Ok(
-                    new CreatedResult<MessageResponse>(outcome.Message!.ToResponse(), false)),
-                AppendStatus.IdempotencyConflict => Fail(SogaErrors.IdempotencyConflict),
-                AppendStatus.Archived => Fail(SogaErrors.ConversationArchived),
-                AppendStatus.ReplyInvalid => Fail(SogaErrors.ReplyInvalid),
-                _ => Fail(SogaErrors.ConversationNotFound),
-            };
+            return ToResult(outcome);
         }
 
         static SogaResult<CreatedResult<MessageResponse>> Fail(SogaError error) =>
             SogaResult<CreatedResult<MessageResponse>>.Fail(error);
     }
+
+    /// <summary>
+    /// Validates a send request and returns its trimmed client message ID.
+    /// </summary>
+    /// <param name="request">The request to validate.</param>
+    /// <returns>The client message ID, or the error that describes the first problem found.</returns>
+    private (string? ClientMessageId, SogaError? Error) ValidateSend(SendMessageRequest? request)
+    {
+        var clientMessageId = request?.ClientMessageId?.Trim();
+        if (!IsValidClientMessageId(clientMessageId))
+        {
+            return (null, SogaErrors.InvalidRequest(
+                $"clientMessageId is required, at most {SogaLimits.MaximumClientMessageIdLength} characters, and may only contain letters, digits, '.', '_', '-' and ':'."));
+        }
+
+        var textError = ValidateText(request!.Text);
+        return textError is null ? (clientMessageId, null) : (null, textError);
+    }
+
+    /// <summary>Maps the store's append outcome to the result returned to the caller.</summary>
+    private static SogaResult<CreatedResult<MessageResponse>> ToResult(AppendMessageOutcome outcome) =>
+        outcome.Status switch
+        {
+            AppendStatus.Created => SogaResult<CreatedResult<MessageResponse>>.Ok(
+                new CreatedResult<MessageResponse>(outcome.Message!.ToResponse(), true)),
+            AppendStatus.Duplicate => SogaResult<CreatedResult<MessageResponse>>.Ok(
+                new CreatedResult<MessageResponse>(outcome.Message!.ToResponse(), false)),
+            AppendStatus.IdempotencyConflict => SogaResult<CreatedResult<MessageResponse>>.Fail(SogaErrors
+                .IdempotencyConflict),
+            AppendStatus.Archived => SogaResult<CreatedResult<MessageResponse>>.Fail(SogaErrors.ConversationArchived),
+            AppendStatus.ReplyInvalid => SogaResult<CreatedResult<MessageResponse>>.Fail(SogaErrors.ReplyInvalid),
+            _ => SogaResult<CreatedResult<MessageResponse>>.Fail(SogaErrors.ConversationNotFound),
+        };
 
     /// <summary>
     /// Replaces the text of one of the caller's own messages.
@@ -180,7 +200,8 @@ internal sealed class MessageWorkflow(
                 return SogaResult<MessageResponse>.Fail(textError);
             }
 
-            var denied = await authorizer.CheckAsync(SogaAction.EditMessage, caller, conversationId, null, messageId, cancellationToken);
+            var denied = await authorizer.CheckAsync(SogaAction.EditMessage, caller, conversationId, null, messageId,
+                cancellationToken);
             if (denied is not null)
             {
                 return SogaResult<MessageResponse>.Fail(denied);
@@ -189,8 +210,11 @@ internal sealed class MessageWorkflow(
             if (!settings.AllowEditing)
             {
                 // Editing disabled by the host; still say "not found" first to non-participants.
-                var access = await store.GetAccessAsync(caller.TenantId, caller.UserId, conversationId, cancellationToken);
-                return SogaResult<MessageResponse>.Fail(access is null ? SogaErrors.ConversationNotFound : SogaErrors.MessageNotEditable);
+                var access =
+                    await store.GetAccessAsync(caller.TenantId, caller.UserId, conversationId, cancellationToken);
+                return SogaResult<MessageResponse>.Fail(access is null
+                    ? SogaErrors.ConversationNotFound
+                    : SogaErrors.MessageNotEditable);
             }
 
             var rejected = await RunValidatorsAsync(caller, conversationId, request!.Text, null, cancellationToken);
@@ -218,17 +242,20 @@ internal sealed class MessageWorkflow(
                 signal.Notify();
             }
 
-            return outcome.Status switch
-            {
-                EditStatus.Updated or EditStatus.Unchanged => SogaResult<MessageResponse>.Ok(outcome.Message!.ToResponse()),
-                EditStatus.MessageNotFound => SogaResult<MessageResponse>.Fail(SogaErrors.MessageNotFound),
-                EditStatus.Forbidden => SogaResult<MessageResponse>.Fail(SogaErrors.AuthorizationDenied),
-                EditStatus.NotEditable => SogaResult<MessageResponse>.Fail(SogaErrors.MessageNotEditable),
-                EditStatus.WindowExpired => SogaResult<MessageResponse>.Fail(SogaErrors.MessageEditWindowExpired),
-                _ => SogaResult<MessageResponse>.Fail(SogaErrors.ConversationNotFound),
-            };
+            return ToResult(outcome);
         }
     }
+
+    /// <summary>Maps the store's edit outcome to the result returned to the caller.</summary>
+    private static SogaResult<MessageResponse> ToResult(EditMessageOutcome outcome) => outcome.Status switch
+    {
+        EditStatus.Updated or EditStatus.Unchanged => SogaResult<MessageResponse>.Ok(outcome.Message!.ToResponse()),
+        EditStatus.MessageNotFound => SogaResult<MessageResponse>.Fail(SogaErrors.MessageNotFound),
+        EditStatus.Forbidden => SogaResult<MessageResponse>.Fail(SogaErrors.AuthorizationDenied),
+        EditStatus.NotEditable => SogaResult<MessageResponse>.Fail(SogaErrors.MessageNotEditable),
+        EditStatus.WindowExpired => SogaResult<MessageResponse>.Fail(SogaErrors.MessageEditWindowExpired),
+        _ => SogaResult<MessageResponse>.Fail(SogaErrors.ConversationNotFound),
+    };
 
     /// <summary>
     /// Deletes a message, leaving an empty tombstone in its place.
@@ -256,7 +283,8 @@ internal sealed class MessageWorkflow(
 
         async Task<SogaResult<bool>> ExecuteAsync()
         {
-            var denied = await authorizer.CheckAsync(SogaAction.DeleteMessage, caller, conversationId, null, messageId, cancellationToken);
+            var denied = await authorizer.CheckAsync(SogaAction.DeleteMessage, caller, conversationId, null, messageId,
+                cancellationToken);
             if (denied is not null)
             {
                 return SogaResult<bool>.Fail(denied);
@@ -291,16 +319,19 @@ internal sealed class MessageWorkflow(
                 }
             }
 
-            return outcome.Status switch
-            {
-                DeleteStatus.Deleted or DeleteStatus.AlreadyDeleted => SogaResult<bool>.Ok(true),
-                DeleteStatus.MessageNotFound => SogaResult<bool>.Fail(SogaErrors.MessageNotFound),
-                DeleteStatus.Forbidden => SogaResult<bool>.Fail(SogaErrors.AuthorizationDenied),
-                DeleteStatus.NotDeletable => SogaResult<bool>.Fail(SogaErrors.MessageNotDeletable),
-                _ => SogaResult<bool>.Fail(SogaErrors.ConversationNotFound),
-            };
+            return ToResult(outcome);
         }
     }
+
+    /// <summary>Maps the store's delete outcome to the result returned to the caller.</summary>
+    private static SogaResult<bool> ToResult(DeleteMessageOutcome outcome) => outcome.Status switch
+    {
+        DeleteStatus.Deleted or DeleteStatus.AlreadyDeleted => SogaResult<bool>.Ok(true),
+        DeleteStatus.MessageNotFound => SogaResult<bool>.Fail(SogaErrors.MessageNotFound),
+        DeleteStatus.Forbidden => SogaResult<bool>.Fail(SogaErrors.AuthorizationDenied),
+        DeleteStatus.NotDeletable => SogaResult<bool>.Fail(SogaErrors.MessageNotDeletable),
+        _ => SogaResult<bool>.Fail(SogaErrors.ConversationNotFound),
+    };
 
     /// <summary>
     /// Gets one page of a conversation's message history, newest first.
@@ -374,12 +405,12 @@ internal sealed class MessageWorkflow(
     /// </summary>
     /// <param name="value">The trimmed client message ID.</param>
     /// <returns>
-    /// <see langword="true"/> if <paramref name="value"/> is 1 to <see cref="SogaOptions.MaximumClientMessageIdLength"/>
+    /// <see langword="true"/> if <paramref name="value"/> is 1 to <see cref="SogaLimits.MaximumClientMessageIdLength"/>
     /// ASCII letters, digits, <c>.</c>, <c>_</c>, <c>-</c>, or <c>:</c>; otherwise, <see langword="false"/>.
     /// </returns>
     internal static bool IsValidClientMessageId(string? value)
     {
-        if (string.IsNullOrEmpty(value) || value.Length > SogaOptions.MaximumClientMessageIdLength)
+        if (string.IsNullOrEmpty(value) || value.Length > SogaLimits.MaximumClientMessageIdLength)
         {
             return false;
         }
@@ -425,7 +456,7 @@ internal sealed class MessageWorkflow(
     /// <returns>
     /// A task that represents the asynchronous operation. The task result is <see langword="null"/> when every
     /// validator accepts the message; otherwise, a <c>soga.message.rejected</c> error carrying the validator's reason
-    /// code, trimmed to 100 characters.
+    /// code, trimmed to <see cref="MaximumReasonLength"/> characters.
     /// </returns>
     private async ValueTask<SogaError?> RunValidatorsAsync(
         SogaCaller caller,
@@ -439,74 +470,20 @@ internal sealed class MessageWorkflow(
             return null;
         }
 
-        var context = new SogaMessageValidationContext(caller.TenantId, caller.UserId, conversationId, text, replyToMessageId);
+        var context =
+            new SogaMessageValidationContext(caller.TenantId, caller.UserId, conversationId, text, replyToMessageId);
         foreach (var validator in _validators)
         {
             var result = await validator.ValidateAsync(context, cancellationToken);
             if (!result.IsValid)
             {
                 var reason = string.IsNullOrWhiteSpace(result.ReasonCode) ? "rejected" : result.ReasonCode.Trim();
-                return SogaErrors.MessageRejected(reason.Length > 100 ? reason[..100] : reason);
+                return SogaErrors.MessageRejected(reason.Length > MaximumReasonLength
+                    ? reason[..MaximumReasonLength]
+                    : reason);
             }
         }
 
         return null;
-    }
-}
-
-/// <summary>
-/// The default <see cref="ISogaSystemMessages"/>, which lets trusted host code post system messages.
-/// </summary>
-/// <param name="store">The persistence store.</param>
-/// <param name="ids">The generator for message and event IDs.</param>
-/// <param name="clock">The clock that timestamps messages.</param>
-/// <param name="signal">Wakes the outbox dispatcher when a message is stored.</param>
-/// <param name="options">The Soga options that hold the text-length limit.</param>
-/// <remarks>
-/// System messages are sent as <see cref="SogaSystemSender.UserId"/>. No HTTP endpoint or hub method reaches this
-/// service, so participants can never create, edit, or delete a system message.
-/// </remarks>
-internal sealed class SogaSystemMessages(
-    ISogaStore store,
-    ISogaIdGenerator ids,
-    TimeProvider clock,
-    SogaOutboxSignal signal,
-    IOptions<SogaOptions> options) : ISogaSystemMessages
-{
-    /// <inheritdoc />
-    public async Task<MessageResponse?> SendAsync(
-        string tenantId,
-        Guid conversationId,
-        string text,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(text);
-        if (text.Length > options.Value.Messages.MaximumTextLength)
-        {
-            throw new ArgumentException($"The text cannot exceed {options.Value.Messages.MaximumTextLength} characters.", nameof(text));
-        }
-
-        var messageId = ids.NewId();
-        var outcome = await store.AppendMessageAsync(
-            new AppendMessageCommand(
-                tenantId.Trim(),
-                SogaSystemSender.UserId,
-                conversationId,
-                $"sys:{messageId:N}",
-                text,
-                messageId,
-                ids.NewId(),
-                clock.GetUtcNow(),
-                IsSystem: true),
-            cancellationToken);
-
-        if (outcome.Status != AppendStatus.Created)
-        {
-            return null;
-        }
-
-        signal.Notify();
-        return outcome.Message!.ToResponse();
     }
 }

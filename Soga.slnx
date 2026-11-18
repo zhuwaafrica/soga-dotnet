@@ -12,9 +12,19 @@
     <File Path="SECURITY.md" />
     <File Path="SOGA_ARCHITECTURE_AND_ENGINEERING_GUIDE.md" />
     <File Path="assets/soga-package-icon.png" />
+    <File Path="assets/soga-nuget-icon.png" />
+    <File Path="package-readme.md" />
+    <File Path="src/Directory.Build.props" />
+  </Folder>
+  <Folder Name="/.github/">
+    <File Path=".github/dependabot.yml" />
+    <File Path=".github/workflows/ci.yml" />
+    <File Path=".github/workflows/dependency-review.yml" />
+    <File Path=".github/workflows/release.yml" />
   </Folder>
   <Folder Name="/docs/">
     <File Path="docs/README.md" />
+    <File Path="docs/architecture.md" />
     <File Path="docs/concepts/README.md" />
     <File Path="docs/deployment/README.md" />
     <File Path="docs/getting-started/README.md" />
@@ -39,6 +49,7 @@
     <File Path="docs/decisions/0015-typing-and-presence.md" />
     <File Path="docs/decisions/0016-database-providers-and-identity-collation.md" />
     <File Path="docs/decisions/0017-v2-protocol-and-compatibility.md" />
+    <File Path="docs/decisions/0018-client-sdks-in-this-repository.md" />
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/Soga.MarketplaceSample/Soga.MarketplaceSample.csproj" />
@@ -46,6 +57,7 @@
     <Project Path="samples/Soga.TeamChatSample/Soga.TeamChatSample.csproj" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/Soga.Client/Soga.Client.csproj" />
     <Project Path="src/Soga.EntityFrameworkCore/Soga.EntityFrameworkCore.csproj" />
     <Project Path="src/Soga/Soga.csproj" />
   </Folder>

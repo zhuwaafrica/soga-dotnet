@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    # Throwaway databases for the SQL Server and PostgreSQL store suites, which are skipped when these are absent. They exist
+    # only for this run, so the passwords below are test values, not secrets.
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "Soga_Ci_Passw0rd!"
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Soga_Ci_Passw0rd!' -C -Q 'SELECT 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      SOGA_TEST_SQLSERVER: "Server=localhost,1433;User Id=sa;Password=Soga_Ci_Passw0rd!;TrustServerCertificate=true"
+      SOGA_TEST_POSTGRES: "Host=localhost;Port=5432;Username=postgres;Password=postgres"
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Full history and tags, so MinVer can compute the package version.
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore Soga.slnx
+
+      - name: Build
+        run: dotnet build Soga.slnx --no-restore -c Release -warnaserror
+
+      - name: Test
+        run: dotnet test Soga.slnx --no-build -c Release
+
+      - name: Pack
+        run: dotnet pack Soga.slnx --no-build -c Release -o artifacts/packages
+
+      - name: Inspect package contents
+        run: |
+          set -e
+          for p in artifacts/packages/*.nupkg; do
+            echo "== $p"
+            unzip -l "$p"
+            # nuget.org rejects a package that holds the same file twice, so catch it here instead of at publish time.
+            duplicates=$(unzip -Z1 "$p" | sort | uniq -d)
+            if [ -n "$duplicates" ]; then
+              echo "::error::Duplicated files in $p: $duplicates"
+              exit 1
+            fi
+          done
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: packages
+          path: artifacts/packages/*
+          if-no-files-found: error

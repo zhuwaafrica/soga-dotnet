@@ -14,27 +14,6 @@ public sealed class SogaOptions
     /// <summary>The configuration section consumed by Soga.</summary>
     public const string SectionName = "Soga";
 
-    /// <summary>The maximum supported normalized host user identifier length.</summary>
-    public const int MaximumUserIdLength = 200;
-
-    /// <summary>The maximum supported normalized tenant identifier length.</summary>
-    public const int MaximumTenantIdLength = 100;
-
-    /// <summary>The maximum supported client message identifier length.</summary>
-    public const int MaximumClientMessageIdLength = 100;
-
-    /// <summary>The maximum supported external reference length.</summary>
-    public const int MaximumExternalReferenceLength = 200;
-
-    /// <summary>The largest message text length the persistence model can store.</summary>
-    public const int AbsoluteMaximumTextLength = 10_000;
-
-    /// <summary>The largest group title the persistence model can store.</summary>
-    public const int AbsoluteMaximumTitleLength = 200;
-
-    /// <summary>The largest conversation metadata document the persistence model can store, in UTF-8 bytes.</summary>
-    public const int AbsoluteMaximumMetadataBytes = 16_384;
-
     /// <summary>Gets or sets the versioned route prefix.</summary>
     public string RoutePrefix { get; set; } = "/soga/v1";
 

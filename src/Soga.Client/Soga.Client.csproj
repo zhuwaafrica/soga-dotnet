@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The .NET client for Soga's HTTP API and SignalR hub, for Blazor, MAUI, desktop and console apps (ADR 0018).
+       Placeholder: no code yet. IsPackable stays false until the client is implemented and tested against the server, so an
+       empty package can never be published. -->
+  <PropertyGroup>
+    <PackageId>Soga.Client</PackageId>
+    <RootNamespace>Soga.Client</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+</Project>

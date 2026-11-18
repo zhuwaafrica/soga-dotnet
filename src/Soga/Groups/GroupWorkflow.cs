@@ -69,7 +69,8 @@ internal sealed class GroupWorkflow(
             var title = NormalizeTitle(request?.Title);
             if (title is null)
             {
-                return Fail(SogaErrors.InvalidRequest($"title is required and cannot exceed {settings.Groups.MaximumTitleLength} characters."));
+                return Fail(SogaErrors.InvalidRequest(
+                    $"title is required and cannot exceed {settings.Groups.MaximumTitleLength} characters."));
             }
 
             var others = new List<string>();
@@ -78,10 +79,12 @@ internal sealed class GroupWorkflow(
                 var userId = SogaIdentity.NormalizeUserId(raw);
                 if (userId is null)
                 {
-                    return Fail(SogaErrors.InvalidRequest($"Every participant ID is required and cannot exceed {SogaOptions.MaximumUserIdLength} characters."));
+                    return Fail(SogaErrors.InvalidRequest(
+                        $"Every participant ID is required and cannot exceed {SogaLimits.MaximumUserIdLength} characters."));
                 }
 
-                if (!string.Equals(userId, caller.UserId, StringComparison.Ordinal) && !others.Contains(userId, StringComparer.Ordinal))
+                if (!string.Equals(userId, caller.UserId, StringComparison.Ordinal) &&
+                    !others.Contains(userId, StringComparer.Ordinal))
                 {
                     others.Add(userId);
                 }
@@ -97,9 +100,10 @@ internal sealed class GroupWorkflow(
             {
                 externalReference = null;
             }
-            else if (externalReference.Length > SogaOptions.MaximumExternalReferenceLength)
+            else if (externalReference.Length > SogaLimits.MaximumExternalReferenceLength)
             {
-                return Fail(SogaErrors.InvalidRequest($"externalReference cannot exceed {SogaOptions.MaximumExternalReferenceLength} characters."));
+                return Fail(SogaErrors.InvalidRequest(
+                    $"externalReference cannot exceed {SogaLimits.MaximumExternalReferenceLength} characters."));
             }
 
             var (metadataJson, metadataError) = SogaMetadata.Validate(request.Metadata, settings.Conversations);
@@ -108,7 +112,8 @@ internal sealed class GroupWorkflow(
                 return Fail(SogaErrors.MetadataInvalid(metadataError));
             }
 
-            var denied = await authorizer.CheckAsync(SogaAction.CreateGroup, caller, null, externalReference, cancellationToken);
+            var denied = await authorizer.CheckAsync(SogaAction.CreateGroup, caller, null, externalReference,
+                cancellationToken);
             if (denied is not null)
             {
                 return Fail(denied);
@@ -128,7 +133,8 @@ internal sealed class GroupWorkflow(
                 cancellationToken);
 
             signal.Notify();
-            await auditor.RecordAsync("group.created", caller.TenantId, caller.UserId, conversation.Id, null, $"participants={others.Count + 1}", cancellationToken);
+            await auditor.RecordAsync("group.created", caller.TenantId, caller.UserId, conversation.Id, null,
+                $"participants={others.Count + 1}", cancellationToken);
             return SogaResult<ConversationResponse>.Ok(conversation.ToResponse());
         }
     }
@@ -152,7 +158,9 @@ internal sealed class GroupWorkflow(
         var metadataGiven = request?.Metadata is not null;
         if (request is null || (!titleGiven && !metadataGiven))
         {
-            return Task.FromResult(SogaResult<ConversationResponse?>.Fail(SogaErrors.InvalidRequest("Provide a title, metadata, or both.")));
+            return Task.FromResult(
+                SogaResult<ConversationResponse?>.Fail(
+                    SogaErrors.InvalidRequest("Provide a title, metadata, or both.")));
         }
 
         string? title = null;
@@ -162,7 +170,8 @@ internal sealed class GroupWorkflow(
             if (title is null)
             {
                 return Task.FromResult(SogaResult<ConversationResponse?>.Fail(
-                    SogaErrors.InvalidRequest($"title cannot be empty or exceed {settings.Groups.MaximumTitleLength} characters.")));
+                    SogaErrors.InvalidRequest(
+                        $"title cannot be empty or exceed {settings.Groups.MaximumTitleLength} characters.")));
             }
         }
 
@@ -233,7 +242,8 @@ internal sealed class GroupWorkflow(
         if (userId is null)
         {
             return Task.FromResult(SogaResult<ConversationResponse?>.Fail(
-                SogaErrors.InvalidRequest($"userId is required and cannot exceed {SogaOptions.MaximumUserIdLength} characters.")));
+                SogaErrors.InvalidRequest(
+                    $"userId is required and cannot exceed {SogaLimits.MaximumUserIdLength} characters.")));
         }
 
         if (!SogaRoles.TryParse(request!.Role, out var role))
@@ -277,7 +287,8 @@ internal sealed class GroupWorkflow(
         var target = SogaIdentity.NormalizeUserId(userId);
         if (target is null)
         {
-            return Task.FromResult(SogaResult<ConversationResponse?>.Fail(SogaErrors.InvalidRequest("A valid user ID is required.")));
+            return Task.FromResult(
+                SogaResult<ConversationResponse?>.Fail(SogaErrors.InvalidRequest("A valid user ID is required.")));
         }
 
         var isSelf = string.Equals(target, caller.UserId, StringComparison.Ordinal);
@@ -315,10 +326,12 @@ internal sealed class GroupWorkflow(
         var target = SogaIdentity.NormalizeUserId(userId);
         if (target is null)
         {
-            return Task.FromResult(SogaResult<ConversationResponse?>.Fail(SogaErrors.InvalidRequest("A valid user ID is required.")));
+            return Task.FromResult(
+                SogaResult<ConversationResponse?>.Fail(SogaErrors.InvalidRequest("A valid user ID is required.")));
         }
 
-        if (request is null || string.IsNullOrWhiteSpace(request.Role) || !SogaRoles.TryParse(request.Role, out var role))
+        if (request is null || string.IsNullOrWhiteSpace(request.Role) ||
+            !SogaRoles.TryParse(request.Role, out var role))
         {
             return Task.FromResult(SogaResult<ConversationResponse?>.Fail(
                 SogaErrors.InvalidRequest("role must be 'member', 'admin', or 'owner'.")));
@@ -379,7 +392,8 @@ internal sealed class GroupWorkflow(
             }
 
             // Membership is confirmed before any host policy runs, so outsiders only ever see "not found".
-            var denied = await authorizer.CheckAsync(action, caller, conversationId, targetUserId, messageId: null, cancellationToken);
+            var denied = await authorizer.CheckAsync(action, caller, conversationId, targetUserId, messageId: null,
+                cancellationToken);
             if (denied is not null)
             {
                 return SogaResult<ConversationResponse?>.Fail(denied);
@@ -418,7 +432,8 @@ internal sealed class GroupWorkflow(
             if (outcome.Changed)
             {
                 signal.Notify();
-                await auditor.RecordAsync(auditAction, caller.TenantId, caller.UserId, conversationId, targetUserId, detail, cancellationToken);
+                await auditor.RecordAsync(auditAction, caller.TenantId, caller.UserId, conversationId, targetUserId,
+                    detail, cancellationToken);
             }
 
             return SogaResult<ConversationResponse?>.Ok(outcome.Conversation?.ToResponse());
@@ -441,5 +456,6 @@ internal sealed class GroupWorkflow(
     /// </summary>
     /// <param name="error">The error that describes the failure.</param>
     /// <returns>A failed <see cref="SogaResult{T}"/>.</returns>
-    private static SogaResult<ConversationResponse> Fail(SogaError error) => SogaResult<ConversationResponse>.Fail(error);
+    private static SogaResult<ConversationResponse> Fail(SogaError error) =>
+        SogaResult<ConversationResponse>.Fail(error);
 }
