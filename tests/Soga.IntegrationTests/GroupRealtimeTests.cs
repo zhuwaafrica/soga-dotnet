@@ -327,7 +327,8 @@ public sealed class GroupRealtimeTests
         await using var _2 = bobHub;
         var (aliceHub, _3) = await ConnectAsync(off, "alice");
         await using var _4 = aliceHub;
-        Assert.True(await bob.StaysQuietAsync(TimeSpan.FromMilliseconds(500)));
+        // Only presence must stay silent. The group's own ConversationCreated event can still be in the outbox and arrive now.
+        Assert.True(await bob.StaysQuietAsync(TimeSpan.FromMilliseconds(500), SogaEventTypes.PresenceChanged));
         Assert.Empty(await bobHub.InvokeAsync<PresenceResponse[]>("GetPresence", quiet.Id));
     }
 
